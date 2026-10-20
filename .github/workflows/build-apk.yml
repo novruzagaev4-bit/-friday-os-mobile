@@ -1,51 +1,67 @@
 
-name: Build F.R.I.D.A.Y. OS APK
+name: Build Friday APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
+    branches:
+      - main
 
 permissions:
   contents: read
 
 jobs:
   build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Extract project
-        run: |
-          unzip -q FRIDAY_OS_Mobile_APK_Build_Kit.zip -d project
-          test -f project/FRIDAY_OS_Mobile_Stage1/app/build.gradle.kts
-
-      - uses: actions/setup-java@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - uses: android-actions/setup-android@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
 
-      - name: Install Android SDK
+      - name: Check ZIP exists
         run: |
-          sdkmanager --install \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          ls -la
+          test -f FRIDAY_OS_Mobile_APK_Build_Kit.zip
+
+      - name: Extract project
+        run: |
+          mkdir -p extracted
+          unzip -q FRIDAY_OS_Mobile_APK_Build_Kit.zip -d extracted
+          find extracted -maxdepth 4 -type f | head -100
+
+      - name: Locate Android project
+        run: |
+          PROJECT_DIR="extracted/FRIDAY_OS_Mobile_Stage1"
+          test -d "$PROJECT_DIR/app"
+          test -f "$PROJECT_DIR/settings.gradle.kts" || \
+            test -f "$PROJECT_DIR/settings.gradle"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
-        working-directory: project/FRIDAY_OS_Mobile_Stage1
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon -p "$PROJECT_DIR" assembleDebug
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
         with:
-          name: FRIDAY-OS-Mobile-APK
-          path: project/FRIDAY_OS_Mobile_Stage1/app/build/outputs/apk/debug/app-debug.apk
+          name: friday-apk
+          path: extracted/FRIDAY_OS_Mobile_Stage1/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          
+
